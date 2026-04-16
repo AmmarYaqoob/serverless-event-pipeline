@@ -1,0 +1,59 @@
+service: event-pipeline
+
+provider:
+  name: aws
+  runtime: nodejs16.x
+  region: us-east-1
+
+  environment:
+    QUEUE_URL:
+      Ref: EventQueue
+    TABLE_NAME: EventTable
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+      Resource:
+        - Fn::GetAtt: [EventQueue, Arn]
+
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource:
+        - Fn::GetAtt: [EventTable, Arn]
+
+functions:
+  ingest:
+    handler: src/handlers/ingest.handler
+    events:
+      - http:
+          path: ingest
+          method: post
+
+  processor:
+    handler: src/handlers/processor.handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [EventQueue, Arn]
+
+resources:
+  Resources:
+    EventQueue:
+      Type: AWS::SQS::Queue
+
+    EventTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: EventTable
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+plugins:
+  - serverless-offline
